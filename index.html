@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Climate & Environment Advisor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0074D9;
+      color: white;
+      margin: 0; padding: 20px;
+    }
+    h1, h2 {
+      font-family: "Times New Roman", Times, serif;
+      text-align: center;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.1);
+      padding: 20px;
+      border-radius: 10px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    button {
+      background-color: #005fa3;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+    button:hover {
+      background-color: #004080;
+    }
+    select, input[type="checkbox"] {
+      cursor: pointer;
+    }
+    .result {
+      background-color: rgba(255,255,255,0.2);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-family: "Times New Roman", Times, serif;
+    }
+    canvas {
+      margin-top: 20px;
+      background-color: white;
+      border-radius: 8px;
+    }
+    .info-text {
+      font-size: 0.9rem;
+      font-style: italic;
+      margin-bottom: 10px;
+    }
+    #tempValue {
+      font-weight: bold;
+      min-width: 40px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Climate & Environment Advisor</h1>
+    
+    <div class="row">
+      <label for="tempSlider">Temperature:</label>
+      <input type="range" id="tempSlider" min="-30" max="50" value="25" />
+      <span id="tempValue">25</span> °C
+    </div>
+
+    <div class="row">
+      <label>
+        <input type="radio" name="unit" value="C" checked /> °C
+      </label>
+      <label>
+        <input type="radio" name="unit" value="F" /> °F
+      </label>
+    </div>
+
+    <div class="row">
+      <label for="bulbType">Select Bulb Type:</label>
+      <select id="bulbType">
+        <option value="LED">LED (Low energy)</option>
+        <option value="CFL">CFL (Moderate energy)</option>
+        <option value="Incandescent">Incandescent (High energy)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="renewableEnergy">Using Renewable Energy?</label>
+      <input type="checkbox" id="renewableEnergy" />
+    </div>
+
+    <button id="checkBtn">Check Advice</button>
+    <button id="downloadBtn">Download Report (PDF)</button>
+
+    <div id="result" class="result" style="display:none;"></div>
+    <canvas id="impactChart" width="400" height="200"></canvas>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    const tempSlider = document.getElementById('tempSlider');
+    const tempValueSpan = document.getElementById('tempValue');
+    const checkBtn = document.getElementById('checkBtn');
+    const resultDiv = document.getElementById('result');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const bulbTypeSelect = document.getElementById('bulbType');
+    const renewableCheckbox = document.getElementById('renewableEnergy');
+
+    const ctx = document.getElementById('impactChart').getContext('2d');
+    let chart;
+
+    // Update slider value display dynamically
+    tempSlider.addEventListener('input', () => {
+      let val = parseInt(tempSlider.value, 10);
+      // Display value in currently selected unit
+      const unit = document.querySelector('input[name="unit"]:checked').value;
+      if(unit === 'F'){
+        val = (val * 9/5) + 32;
+        tempValueSpan.textContent = val.toFixed(1);
+      } else {
+        tempValueSpan.textContent = tempSlider.value;
+      }
+    });
+
+    // Update tempValue display on unit change
+    const unitRadios = document.querySelectorAll('input[name="unit"]');
+    unitRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        let val = parseInt(tempSlider.value, 10);
+        const unit = document.querySelector('input[name="unit"]:checked').value;
+        if(unit === 'F'){
+          val = (val * 9/5) + 32;
+          tempValueSpan.textContent = val.toFixed(1);
+        } else {
+          tempValueSpan.textContent = tempSlider.value;
+        }
+      });
+    });
+
+    function getBulbImpactFactor(bulbType) {
+      switch (bulbType) {
+        case "LED": return 0.6;
+        case "CFL": return 0.85;
+        case "Incandescent": return 1;
+        default: return 1;
+      }
+    }
+
+    function getAdvice(temp, unit, bulbType, renewable) {
+      let celsiusTemp = unit === 'F' ? (temp - 32) * 5/9 : temp;
+      celsiusTemp = Math.round(celsiusTemp * 10) / 10;
+
+      let advice = "", clothing = "", cooling = "", environment = "", impactText = "";
+      let impactScore = 0;
+
+      if (celsiusTemp <= 0) {
+        advice = "❄️ Very cold weather.";
+        clothing = "Heavy winter clothes";
+        cooling = "Use heaters moderately";
+        environment = "Layer clothes to reduce heating emissions";
+        impactText = "High heating needs → High carbon footprint";
+        impactScore = 80;
+      } else if (celsiusTemp <= 15) {
+        advice = "🌬️ Cool weather.";
+        clothing = "Light jacket";
+        cooling = "Be active, avoid over-heating";
+        environment = "Use energy-efficient heating";
+        impactText = "Moderate heating needs";
+        impactScore = 50;
+      } else if (celsiusTemp <= 25) {
+        advice = "😊 Pleasant weather.";
+        clothing = "Light clothes";
+        cooling = "Open windows for ventilation";
+        environment = "Minimal energy use, eco-friendly!";
+        impactText = "Best temperature range 🌍";
+        impactScore = 10;
+      } else if (celsiusTemp <= 35) {
+        advice = "☀️ Warm weather.";
+        clothing = "Breathable clothes";
+        cooling = "Use fans or stay in shade";
+        environment = "Reduce AC use";
+        impactText = "Increased cooling needs";
+        impactScore = 50;
+      } else {
+        advice = "🔥 Very hot weather.";
+        clothing = "Minimal breathable wear";
+        cooling = "Stay indoors, hydrate often";
+        environment = "High energy use for AC";
+        impactText = "Severe environmental impact";
+        impactScore = 85;
+      }
+
+      // Adjust impactScore based on bulb type
+      const bulbImpactFactor = getBulbImpactFactor(bulbType);
+      impactScore = Math.min(100, Math.round(impactScore * bulbImpactFactor));
+
+      // Reduce impact if using renewable energy
+      if (renewable) {
+        impactScore = Math.max(0, impactScore - 20);
+        impactText += " + renewable energy usage reduces impact!";
+      }
+
+      return { celsiusTemp, unit, advice, clothing, cooling, environment, impactScore, impactText, bulbType, renewable };
+    }
+
+    function displayAdvice(data) {
+      resultDiv.style.display = "block";
+      resultDiv.innerHTML = `
+        <h2>${data.advice}</h2>
+        <p><strong>Temperature:</strong> ${data.celsiusTemp} °C (${data.unit === 'F' ? (data.celsiusTemp * 9/5 + 32).toFixed(1) + ' °F' : data.celsiusTemp + ' °C'})</p>
+        <p><strong>Clothing:</strong> ${data.clothing}</p>
+        <p><strong>Cooling Tips:</strong> ${data.cooling}</p>
+        <p><strong>Environmental Tips:</strong> ${data.environment}</p>
+        <p><strong>Bulb Type:</strong> ${data.bulbType}</p>
+        <p><strong>Renewable Energy:</strong> ${data.renewable ? "Yes" : "No"}</p>
+        <p><strong>Impact:</strong> ${data.impactText}</p>
+      `;
+
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Carbon Impact'],
+          datasets: [{
+            label: 'Impact Score (0 = Low, 100 = High)',
+            data: [data.impactScore],
+            backgroundColor: ['rgba(255, 99, 132, 0.6)'],
+            borderColor: ['rgba(255, 99, 132, 1)'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100
+            }
+          }
+        }
+      });
+    }
+
+    checkBtn.onclick = () => {
+      let tempCelsius = parseInt(tempSlider.value, 10);
+      const unit = document.querySelector('input[name="unit"]:checked').value;
+      let temp = tempCelsius;
+      if(unit === 'F'){
+        temp = (tempCelsius * 9/5) + 32;
+      }
+      const bulbType = bulbTypeSelect.value;
+      const renewable = renewableCheckbox.checked;
+      const data = getAdvice(temp, unit, bulbType, renewable);
+      displayAdvice(data);
+    };
+
+    downloadBtn.onclick = () => {
+      let tempCelsius = parseInt(tempSlider.value, 10);
+      const unit = document.querySelector('input[name="unit"]:checked').value;
+      let temp = tempCelsius;
+      if(unit === 'F'){
+        temp = (tempCelsius * 9/5) + 32;
+      }
+      const bulbType = bulbTypeSelect.value;
+      const renewable = renewableCheckbox.checked;
+      const data = getAdvice(temp, unit, bulbType, renewable);
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      doc.setFont("times", "normal");
+      doc.setFontSize(18);
+      doc.text("Climate & Environment Report", pageWidth / 2, 15, { align: "center" });
+
+      let y = 30;
+      doc.setFontSize(12);
+      doc.text(`Date: ${new Date().toLocaleString()}`, 14, y); y += 10;
+      doc.text(`Temperature: ${data.celsiusTemp} °C (${unit === 'F' ? (data.celsiusTemp * 9/5 + 32).toFixed(1) + ' °F' : data.celsiusTemp + ' °C'})`, 14, y); y += 10;
+      doc.text(`Advice: ${data.advice}`, 14, y); y += 10;
+      doc.text(`Clothing: ${data.clothing}`, 14, y); y += 10;
+      doc.text(`Cooling Tips: ${data.cooling}`, 14, y); y += 10;
+      doc.text(`Environmental Tips: ${data.environment}`, 14, y); y += 10;
+      doc.text(`Bulb Type: ${data.bulbType}`, 14, y); y += 10;
+      doc.text(`Using Renewable Energy: ${data.renewable ? "Yes" : "No"}`, 14, y); y += 10;
+      doc.text(`Impact: ${data.impactText}`, 14, y); y += 10;
+
+      // Footer
+      doc.setFontSize(8);
+      doc.text("Generated by Climate & Environment Advisor", pageWidth / 2, pageHeight - 10, { align: "center" });
+
+      doc.save("Climate_Report.pdf");
+    };
+
+    // Initial display setup
+    tempValueSpan.textContent = tempSlider.value;
+  </script>
+</body>
+</html>
